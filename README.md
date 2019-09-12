@@ -7,6 +7,7 @@ There is a set of nono-recursive tree functions as well, but will be the first t
 
 Here is a simple example of the linked list functions in use.  
 
+<pre>
 #include <stdlib.h>
 #include <stdio.h>
 #include "listque.h"
@@ -39,3 +40,4 @@ int main (void)
 
    LLdestroy (llhnd);
 }
+</pre>
