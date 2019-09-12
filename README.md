@@ -3,7 +3,7 @@
 C Linked list, Que, stack and tree library. 
 
 This is a library I wrote mostly long ago. It contains functions to create and manage Link lists, Stacks and Queues. 
-There is a set of nono-recursive tree functions as well, but will be the first to say they were never extensively tested.
+There is a set of non-recursive tree functions as well, but will be the first to say they were never extensively tested.
 
 Here is a simple example of the linked list functions in use.  
 
