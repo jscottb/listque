@@ -44,6 +44,10 @@
 #define LLNORMAL   0
 #define LLASNSORT  1
 #define LLDESSORT  2
+#define MEM_STACK  0
+#define LL_STACK   1
+#define STK_READ   0
+#define STK_PEEK   1
 
 /* Pointer to a element to be stored in a list. */
 typedef void *PELEMENT;
@@ -120,6 +124,7 @@ typedef struct _SHND {
    SELEMENT      storage;    /* Base of Stack memory. */
    SELEMENT      bottom;
    SELEMENT      sptr;       /* Stack Poiter. */
+   PLLHND        llhnd;
    int           ssize;      /* Size of stack in entries. */
    int           entrysz;
    int           entrycnt;
@@ -311,12 +316,13 @@ int Qread (PQHND qhnd, QELEMENT entry);
 /*
    Macro to read top stack entry without removeing it.
 */
-#define Speek(shnd,entry) memcpy((entry),(shnd)->sptr,(shnd)->entrysz)
+//#define Speek(shnd,entry) memcpy((entry),(shnd)->sptr,(shnd)->entrysz)
 
 /*
    Create a stack for use.
 */
-PSHND Screate (int entrysz, int Stsize, int mode);
+//PSHND Screate (int entrysz, int Stsize, int mode);
+PSHND Screate (int entrysz, int Stsize, int mode, int type);
 
 /*
    Destroy a stack.
@@ -331,7 +337,7 @@ int Spush (PSHND shnd, SELEMENT entry);
 /*
    Pop next stack entry.
 */
-int Spop (PSHND shnd, SELEMENT entry);
+int Spop (PSHND shnd, SELEMENT entry, int peek);
 
 /*
    Read a stack entry.

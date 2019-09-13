@@ -13,6 +13,7 @@
 */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "listque.h"
 
@@ -605,18 +606,25 @@ int Qread (PQHND qhnd, QELEMENT entry)
 /*
    Create a stack for use.
 */
-PSHND Screate (int entrysz, int Stsize, int mode)
+PSHND Screate (int entrysz, int Stsize, int mode, int type)
 {
    PSHND shnd;
 
    /* Create a stack information block. */
    shnd = (PSHND) malloc (sizeof (SHND));
 
-   shnd->storage = (SELEMENT) malloc (entrysz * Stsize);
+   if (type == LL_STACK) {
+      shnd->llhnd = LLcreate (entrysz, 1, LLNORMAL, NULL);
+      shnd->sptr = (SELEMENT) NULL;
+      shnd->bottom = (SELEMENT) NULL;   
+   } else {
+      shnd->storage = (SELEMENT) malloc (entrysz * Stsize);
+      shnd->sptr = shnd->storage;
+      shnd->bottom = shnd->storage + (entrysz * Stsize);   
+      shnd->llhnd = (PLLHND) NULL;   
+   }
 
-   shnd->sptr = shnd->storage;
    shnd->entrysz = entrysz;
-   shnd->bottom = shnd->storage + (entrysz * Stsize);
    shnd->ssize = Stsize;
    shnd->entrycnt = 0;
    shnd->mode = mode;
@@ -629,9 +637,13 @@ PSHND Screate (int entrysz, int Stsize, int mode)
 */
 int Sdestroy (PSHND shnd)
 {
-   free (shnd->storage);
-   free (shnd);
+   if (!shnd->llhnd) {
+      free (shnd->storage);
+   } else {
+      LLdestroy (shnd->llhnd);
+   }
 
+   free (shnd);
    return OK;
 }
 
@@ -644,18 +656,28 @@ int Spush (PSHND shnd, SELEMENT entry)
       return SOVERFLOW;
    }
 
-   shnd->sptr = (shnd->sptr > shnd->bottom ? NULL : 
-                  shnd->sptr + shnd->entrysz);
+   if (!shnd->llhnd) {
+      shnd->sptr = (shnd->sptr > shnd->bottom ? NULL : 
+                     shnd->sptr + shnd->entrysz);
 
-   if (!shnd->sptr) {
-      shnd->sptr = shnd->storage;
-      return SOVERFLOW;
+      if (!shnd->sptr) {
+         shnd->sptr = shnd->storage;
+         return SOVERFLOW;
+      }
+
+      if (!shnd->mode)
+         shnd->sptr = entry;
+      else   
+         memcpy (shnd->sptr, entry, shnd->entrysz);
+   } else {
+
+       if (shnd->entrycnt > shnd->ssize) {
+            return SOVERFLOW;
+            //LLhomecursor (shnd->llhnd);
+       }
+
+       LLwrite (shnd->llhnd, (LLELEMENT) entry, LLAPPEND, 0);
    }
-
-   if (!shnd->mode)
-      shnd->sptr = entry;
-   else   
-      memcpy (shnd->sptr, entry, shnd->entrysz);
 
    shnd->entrycnt++;
 
@@ -665,27 +687,41 @@ int Spush (PSHND shnd, SELEMENT entry)
 /*
    Pop next stack entry.
 */
-int Spop (PSHND shnd, SELEMENT entry)
+int Spop (PSHND shnd, SELEMENT entry, int peek)
 {
-   if (!shnd->entrycnt) {
-      return SUNDERFLOW;
-   }
-
-   if (!shnd->mode)
-      entry = shnd->sptr;
-   else   
-      memcpy (entry, shnd->sptr, shnd->entrysz);
-
-   shnd->sptr = (shnd->sptr == shnd->storage ? NULL : 
-                  shnd->sptr - shnd->entrysz);
-
-   if (!shnd->sptr) {
-      shnd->sptr = shnd->storage;
+   if (shnd->entrycnt < 0) {
+      if (shnd->llhnd) {
+         LLhomecursor (shnd->llhnd);
+      } else {
+         shnd->sptr = shnd->storage;
+      }
       shnd->entrycnt = 0;
       return SUNDERFLOW;
    }
 
-   shnd->entrycnt--;
+   if (!shnd->llhnd) {
+      if (!shnd->mode)
+         entry = shnd->sptr;
+      else   
+         memcpy (entry, shnd->sptr, shnd->entrysz);
+
+      if (!peek) {
+         shnd->sptr = (shnd->sptr == shnd->storage ? NULL : 
+                        shnd->sptr - shnd->entrysz);
+
+         if (!shnd->sptr) {
+            shnd->sptr = shnd->storage;
+            shnd->entrycnt = 0;
+            return SUNDERFLOW;
+         }
+      }
+   } else {
+      LLread (shnd->llhnd, (LLELEMENT)entry, LLSEEK, shnd->entrycnt-1);
+   }
+
+   if (!peek) {
+      shnd->entrycnt--;
+   }
 
    return OK;
 }
@@ -701,12 +737,16 @@ int Sread (PSHND shnd, SELEMENT entry, int stk_ndx)
       return SUNDERFLOW;
    }
 
-   sptr = shnd->storage + (shnd->entrysz * stk_ndx);
+   if (!shnd->llhnd) {
+      sptr = shnd->storage + (shnd->entrysz * stk_ndx);
 
-   if (!shnd->mode)
-      entry = sptr;
-   else   
-      memcpy (entry, sptr, shnd->entrysz);
+      if (!shnd->mode)
+         entry = sptr;
+      else   
+         memcpy (entry, sptr, shnd->entrysz);
+   } else {
+      LLread (shnd->llhnd, (LLELEMENT)entry, LLSEEK, stk_ndx-1);
+   }
 
    return OK;
 }
