@@ -29,9 +29,9 @@
 */
 
 /* Un-comment if using curses library. */
-/*#define CURSES_APP*/
+#define CURSES_APP
 
-#define WIN32CON
+//#define WIN32CON
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -146,7 +146,7 @@ void sprdsht (void)
       gotoxy (1, 1);
       clrline (1);
       gotoxy (1, 1);
-      cCmd = *strUserRep = (char) NULL;
+      cCmd = *strUserRep = '\0';
       fputs ("Cmd:", stdout);
       fgets (strUserRep, 80, stdin);
       TrimLeft (strUserRep);
@@ -244,7 +244,7 @@ void displaysht (PLLHND llhnd, int iCol, int iRow)
          #endif
 
          #ifndef __DJGPP__
-         printf ("%02.2d", ircnt++);
+         printf ("%2.2d", ircnt++);
          #endif
       }
 
@@ -413,7 +413,7 @@ char *GetStrFld (char *strbuf, int fldno, int ofset, char *sep, char *retstr)
       if (offset)
          offset++;
       else if (curfld != fldno) {
-         *retstr = (char) NULL;
+         *retstr = '\0';
          break;
       }
 
