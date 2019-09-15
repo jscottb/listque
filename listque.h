@@ -1,4 +1,19 @@
 /*
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+/*
    LISTQUE.H
 
    04/16/90 
@@ -119,6 +134,11 @@ typedef QHND *PQHND;
 /* Pointer to a element to be stored in a stack. */
 typedef char *SELEMENT;
 
+/*
+   Pointer to a element free function.
+*/
+typedef int (*STACKELMFREE) (SELEMENT);
+
 /* Stack information structure. */
 typedef struct _SHND {
    SELEMENT      storage;    /* Base of Stack memory. */
@@ -129,6 +149,7 @@ typedef struct _SHND {
    int           entrysz;
    int           entrycnt;
    int           mode;
+   STACKELMFREE  freefunc;
 } SHND;
 
 /* Pointer to a stack handle. */
@@ -319,10 +340,14 @@ int Qread (PQHND qhnd, QELEMENT entry);
 //#define Speek(shnd,entry) memcpy((entry),(shnd)->sptr,(shnd)->entrysz)
 
 /*
+   Macro to get stack entry count.
+*/
+#define Sdepth(shnd) (shnd)->entrycnt
+/*
    Create a stack for use.
 */
 //PSHND Screate (int entrysz, int Stsize, int mode);
-PSHND Screate (int entrysz, int Stsize, int mode, int type);
+PSHND Screate (int entrysz, int Stsize, int mode, int type, STACKELMFREE freefunc);
 
 /*
    Destroy a stack.
