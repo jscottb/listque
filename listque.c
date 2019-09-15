@@ -606,7 +606,7 @@ int Qread (PQHND qhnd, QELEMENT entry)
 /*
    Create a stack for use.
 */
-PSHND Screate (int entrysz, int Stsize, int mode, int type)
+PSHND Screate (int entrysz, int Stsize, int mode, int type, STACKELMFREE freefunc)
 {
    PSHND shnd;
 
@@ -628,6 +628,7 @@ PSHND Screate (int entrysz, int Stsize, int mode, int type)
    shnd->ssize = Stsize;
    shnd->entrycnt = 0;
    shnd->mode = mode;
+   shnd->freefunc = freefunc;
 
    return (PSHND) shnd;
 }
@@ -721,6 +722,10 @@ int Spop (PSHND shnd, SELEMENT entry, int peek)
 
    if (!peek) {
       shnd->entrycnt--;
+
+      if (shnd->freefunc) {
+         (*shnd->freefunc) (entry);
+      }
    }
 
    return OK;
