@@ -59,11 +59,13 @@
 #define LLNORMAL   0
 #define LLASNSORT  1
 #define LLDESSORT  2
+
 #define MEM_STACK  0
 #define LL_STACK   1
 #define STK_READ   0
 #define STK_PEEK   1
-
+#define NOFREE     1
+#define FREE       0
 /* Pointer to a element to be stored in a list. */
 typedef void *PELEMENT;
 
@@ -362,7 +364,7 @@ int Spush (PSHND shnd, SELEMENT entry);
 /*
    Pop next stack entry.
 */
-int Spop (PSHND shnd, SELEMENT entry, int peek);
+int Spop (PSHND shnd, SELEMENT entry, int peek, int nofree);
 
 /*
    Read a stack entry.

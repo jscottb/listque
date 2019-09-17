@@ -112,7 +112,6 @@ int LLdestroy (PLLHND llhnd)
       }
    }
 
-   memset (llhnd, 0, sizeof (LLHND));
    free (llhnd);
    llhnd = (PLLHND) NULL;
 
@@ -703,7 +702,7 @@ int Spush (PSHND shnd, SELEMENT entry)
 /*
    Pop next stack entry (or read with no POP).
 */
-int Spop (PSHND shnd, SELEMENT entry, int peek)
+int Spop (PSHND shnd, SELEMENT entry, int peek, int nofree)
 {
    if (shnd->entrycnt < 0) {
       if (shnd->llhnd) {
@@ -737,11 +736,12 @@ int Spop (PSHND shnd, SELEMENT entry, int peek)
 
    if (!peek) {
       shnd->entrycnt--;
-
-      if (shnd->freefunc) {
-         (*shnd->freefunc) (entry);
-      }
    }
+
+   //    if (shnd->freefunc && !nofree) {
+   //       (*shnd->freefunc) (entry);
+   //    }
+   // }
 
    return OK;
 }
