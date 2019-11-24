@@ -66,17 +66,10 @@ int main(int argc, char **argv)
             int_var = (int) ndx; 
             memcpy (new_stk_ent.parm_val, (void *) &int_var, sizeof (int));             
         }
-        
-        Spush (stack_main, (SELEMENT) &new_stk_ent);
-
-        if (ndx % 25) {
-
-        }
 
         ndx++;
     }
 
-    puts ("TP1");
     Spop (stack_main, (SELEMENT) &new_stk_ent, STK_READ);
     Spop (stack_main, (SELEMENT) &new_stk_ent, STK_READ);
     new_stk_ent.data_type = 'i';
@@ -91,7 +84,7 @@ int main(int argc, char **argv)
     flt_var = (float) ndx + 1; 
     memcpy (new_stk_ent.parm_val, (void *) &flt_var, sizeof (float));    
     Spush (stack_main, (SELEMENT) &new_stk_ent);    
-    puts ("TP2"); 
+
     ndx = Sdepth(stack_main);
     while (ndx) {
         Spop (stack_main, (SELEMENT) &new_stk_ent, STK_READ);
@@ -117,7 +110,6 @@ int free_var (SELEMENT elm)
         flt_var = *(float *)op->parm_val;
         printf ("<%f>", flt_var);        
     }
-    printf (" <%p>\n", op->parm_val);
  
     if (op->parm_val) {
         free (op->parm_val);
