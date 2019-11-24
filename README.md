@@ -8,8 +8,8 @@ There is a set of non-recursive tree functions as well, but will be the first to
 Here is a simple example of the linked list functions in use.  
 
 <pre>
-#include <stdlib.h>
-#include <stdio.h>
+#include \<stdlib.h\>
+#include \<stdio.h\>
 #include "listque.h"
 
 int main (void);
