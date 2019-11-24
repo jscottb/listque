@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "listque.h"
+#include <stddef.h>
 
 /*
    Creates a link list for use.
@@ -41,6 +42,7 @@ PLLHND LLcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc)
 
    /* Create a link list information block. */
    llhnd = (PLLHND) malloc (sizeof (LLHND));
+   //memset (llhnd, 0, sizeof (LLHND));
 
    if (!llhnd)
       return (PLLHND) NULL;
@@ -52,7 +54,8 @@ PLLHND LLcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc)
       llhnd->bMode = 1;
       llhnd->style = style;
       llhnd->cmpfunc = cmpfunc;
-  
+      llhnd->current = (PLLENTRY) NULL;
+      
       /* 
          If this is clear, then a assignment is done, and not a copy.
          This is useful for pointer storage.
@@ -94,14 +97,14 @@ int LLdestroy (PLLHND llhnd)
    while (LLentrycount (llhnd)) {
       if (entry->entry) {
          free (entry->entry);
-         entry->entry = (LLELEMENT) NULL;
+         //entry->entry = (LLELEMENT) NULL;
       }
 
       if (entry->next) {
          entry = entry->next;
          if (entry->prev) {
             free (entry->prev);
-            entry->prev = (PLLENTRY) NULL;
+            //entry->prev = (PLLENTRY) NULL;
          }
       }
 
@@ -139,8 +142,8 @@ int LLclose (PLLHND llhnd)
 */
 int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
 {
-   PLLENTRY llentry;
-   PLLENTRY insertentry;
+   PLLENTRY llentry = NULL;
+   PLLENTRY insertentry = NULL;
 
    if (!llhnd->bMode)
       return ERROR;
@@ -223,7 +226,7 @@ int LLread (PLLHND llhnd, LLELEMENT entry, int rs, int pos)
          llhnd->current = llhnd->current->next;
       }
    }
-
+   
    if (llhnd->current) {
       if (!llhnd->entrysz) {
          strcpy ((char *) entry, (char *) llhnd->current->entry);
@@ -234,13 +237,16 @@ int LLread (PLLHND llhnd, LLELEMENT entry, int rs, int pos)
       }
 
       llhnd->current = (llhnd->current->next ? llhnd->current->next :
-                         NULL);
-   }
-
-   if (!llhnd->current)
+                         (PLLENTRY) NULL);
+   } else {
+      llhnd->current = (PLLENTRY) NULL;
       return EOL;
-   else
-      return OK;
+   }
+   
+   // if (!llhnd->current)
+   //    return EOL;
+   // else
+   return OK;
 }
 
 /*
@@ -340,13 +346,11 @@ int LLreplace (PLLHND llhnd, int pos, LLELEMENT entry)
       }
    }
 
-   free (llhnd->current->entry);
+   free (llhnd->current->entry);  // Free the current entry, to be replaced below.
 
-   if (!llhnd->bMemCpy) {
+   if (!llhnd->bMemCpy) {  // Replace the old entry ptr wit the new one.
       llhnd->current->entry = (LLELEMENT) entry;
-   }
-
-   else {
+   } else {      // Replace the old entry (char array) with the new one.  
       if (!llhnd->entrysz) {
          llhnd->current->entry = (LLELEMENT) malloc (strlen ((char *)
                                                         entry) + 1);
@@ -355,9 +359,7 @@ int LLreplace (PLLHND llhnd, int pos, LLELEMENT entry)
          else {
             strcpy ((char *) llhnd->current->entry, (char *) entry);
          }
-      }
-   
-      else {
+      } else {   // Replace the old entry (mem block) with the new one.  
          llhnd->current->entry = (LLELEMENT) malloc (llhnd->entrysz);
    
          if (!llhnd->current->entry)

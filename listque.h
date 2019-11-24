@@ -36,6 +36,9 @@
          Stack's are LIFO.          
 */
 
+#ifndef _LISTQUE_
+#define _LISTQUE_
+
 #define OK         1
 #define ERROR      0
 #define EOL        2
@@ -97,6 +100,7 @@ typedef struct _LLHND {
    PLLENTRY       llfirst;  /* First entry into the link list. */
    PLLENTRY       lllast;   /* Last entry into the link list. */
    PLLENTRY       current;  /* Pointer to current entry. */
+   //PLLENTRY       no_elm;
    long           entrysz;  /* Size of the link list entry. */
    int            entrycnt; /* Number of entries currently in list. */
    int            bMemCpy;  /* */
@@ -410,4 +414,6 @@ int Tclose (PTHND thnd);
 // #define	NOBUCK 255
 // #define	hashint(x) ((int)(((unsigned int)(x))&NOBUCK))
 // #define	hashstr(str) (((unsigned char)(str)[1]<<5)+(unsigned char)(str)[0])
+
+#endif
 
