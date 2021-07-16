@@ -165,6 +165,7 @@ int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
    if (ws == LLAPPEND) {
       if (!llhnd->llfirst) {
          llhnd->llfirst = llhnd->current = llentry;
+         llentry->next = (PLLENTRY) NULL;
       }
 
       else {
