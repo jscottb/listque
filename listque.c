@@ -165,29 +165,37 @@ int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
    if (ws == LLAPPEND) {
       if (!llhnd->llfirst) {
          llhnd->llfirst = llhnd->current = llentry;
-         llentry->next = (PLLENTRY) NULL;
+         llentry->prev = (PLLENTRY) NULL;
       }
 
       else {
          llentry->prev = llhnd->lllast;
          llhnd->lllast->next = llentry;
-         llentry->next = (PLLENTRY) NULL;
       }
 
       llhnd->lllast = llentry;
+      llentry->next = (PLLENTRY) NULL;
    }
 
    /* Insert item into the list. */
    else {
       insertentry = llhnd->llfirst;
 
-      while (insertentry->next && pos--) {
-         insertentry = insertentry->next;
+      if (pos != 0) {
+         while (insertentry->next && pos--) {
+            insertentry = insertentry->next;
+         }
+      } else { // Reset first entry if inserting above the first
+         llhnd->llfirst = llentry;
       }
 
       llentry->prev = insertentry->prev;
       llentry->next = insertentry;
-      llhnd->current = llentry->prev->next = llentry;
+      llhnd->current = llentry;
+
+      if (llentry->prev != (PLLENTRY)NULL)
+         llentry->prev->next = llentry;
+	
       insertentry->prev = llentry;
    }
 
