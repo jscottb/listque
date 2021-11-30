@@ -13,6 +13,8 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+// NOTE: Fix list of pointers free.  //k has the col list LL code. An array of PLLHNDS are used right now.
+
 /*
    LLTEST.c
 
@@ -98,6 +100,8 @@ char *GetStrFld (char *strbuf, int fldno, int ofset, char *sep, char *retstr);
 char *TrimLeft (char *strbuf);
 char *TrimRight (char *strbuf);
 
+   PLLHND col_lists[27];
+
 void main (void)
 {
    #ifdef WIN32CON
@@ -110,19 +114,20 @@ void main (void)
 void sprdsht (void)
 {
    int i = 0, rows, iRow, iCol;
-   PLLHND llcols, llcollist;
+   PLLHND llcols = NULL, llcollist;
    char strUserRep[81], strRow[26], strCol[26], cCmd;
    char strTmp[11];
-
+   
    clrscr ();
 
    /* Create a list to store pointers in. */   
-   llcols = LLcreate (sizeof (PLLHND), 0, LLNORMAL, NULL);
+//k   llcols = LLcreate (sizeof (PLLHND), 0, LLNORMAL, NULL);
 
    while (i < MAX_COLS) {
       /* Create a list to store dynamic string data in. */   
       llcollist = LLcreate (STRSIZE, 1, LLDESSORT, cmpint);
-      LLwrite (llcols, (LLELEMENT) llcollist, LLAPPEND, 0);
+      col_lists[i] = llcollist;
+//k      LLwrite (llcols, (LLELEMENT) llcollist, LLAPPEND, 0);
 
       /* Init the row's and write them to the list. */
       rows = 0;
@@ -139,13 +144,14 @@ void sprdsht (void)
 
    iCol = 0;
    iRow = 0;
-   LLhomecursor (llcols);
+//k   LLhomecursor (llcols);
    while (1) {
       clrscr ();
       displaysht (llcols, iCol, iRow);
 
-      LLsetcursor (llcols, iCol); 
-      llcollist = (PLLHND) LLreadcursor (llcols);
+//k      LLsetcursor (llcols, iCol); 
+//k      llcollist = (PLLHND) LLreadcursor (llcols);
+      llcollist = col_lists[iCol];
       LLsetcursor (llcollist, iRow);
 
       gotoxy (1, 2);
@@ -163,7 +169,10 @@ void sprdsht (void)
       gotoxy (1, 1);
       cCmd = *strUserRep = '\0';
       fputs ("Cmd:", stdout);
-      fgets (strUserRep, 80, stdin);
+      if (!fgets (strUserRep, 80, stdin)) {
+         puts ("Error getting input.");	   
+      }
+      
       TrimLeft (strUserRep);
       TrimRight (strUserRep);
       cCmd = toupper (*strUserRep);
@@ -179,7 +188,9 @@ void sprdsht (void)
       clrline (1);
       gotoxy (1, 1);
       fputs ("Col, Row: ", stdout);
-      fgets (strUserRep, 80, stdin);
+      if (!fgets (strUserRep, 80, stdin)) {
+         puts ("Error getting input.");	   
+      }
 
       TrimLeft (strUserRep);
       TrimRight (strUserRep);
@@ -196,8 +207,9 @@ void sprdsht (void)
          iRow = 0;
       }
 
-      LLsetcursor (llcols, iCol); 
-      llcollist = (PLLHND) LLreadcursor (llcols);
+//k      LLsetcursor (llcols, iCol);
+      llcollist = col_lists[iCol];
+//k      llcollist = (PLLHND) LLreadcursor (llcols);
       LLsetcursor (llcollist, iRow); 
 
       if (cCmd == 'W') {
@@ -205,7 +217,9 @@ void sprdsht (void)
          clrline (1);
          gotoxy (1, 1);
          fputs ("Enter new value:", stdout);
-         fgets (strUserRep, 80, stdin);            
+         if (!fgets (strUserRep, 80, stdin)) {
+             puts ("Error getting input.");	   
+         }
          TrimLeft (strUserRep);
          TrimRight (strUserRep);
          LLreplace (llcollist, iRow, (LLELEMENT) strUserRep);
@@ -226,22 +240,23 @@ void sprdsht (void)
 
    clrscr ();
    /* Clean up and leave. */
-   LLhomecursor (llcols);
+//k   LLhomecursor (llcols);
+
+   iCol = 0;
    while (1) {
-      LLdestroy ((PLLHND) LLreadcursor (llcols));
-      if (LLnext (llcols) == EOL) 
-         break;
+      llcollist = col_lists[iCol];
+      
+      LLdestroy (llcollist);
+//k      LLdestroy ((PLLHND) LLreadcursor (llcols));
+//k      if (LLnext (llcols) == EOL) 
+//         break;
+
+      if (iCol >= 25)
+	 break;
+      iCol++;
    }
 
-   /*
-      NOTE:
-      This is not usally done to a writable list, but
-      this list contained, ptr's to other linked list 
-      handles. So when they were destroyed, the only 
-      thing left to do was to free the list handle
-      itself.
-   */
-   LLclose (llcols);
+//k   LLdestroy (llcols);
 }
 
 void displaysht (PLLHND llhnd, int iCol, int iRow)
@@ -249,7 +264,9 @@ void displaysht (PLLHND llhnd, int iCol, int iRow)
    int x = XSTART, y = YSTART, ircnt = iRow, bTop = 1, iccnt = iCol;
    PLLHND llcollist;
 
-   llcollist = (PLLHND) LLreadcursor (llhnd);
+//k   llcollist = (PLLHND) LLreadcursor (llhnd);
+   llcollist = col_lists[iCol];
+
    LLsetcursor (llcollist, iRow); 
    while (1) {
       if (x == XSTART) {
@@ -285,10 +302,12 @@ void displaysht (PLLHND llhnd, int iCol, int iRow)
       #endif
 
       if (LLnext (llcollist) == EOL || y > YEND) {
-         if (LLnext (llhnd) == EOL || x > XEND)
+//k         if (LLnext (llhnd) == EOL || x > XEND)
+         if (iRow++ > 25 || x > XEND)
             break;
      
-         llcollist = (PLLHND) LLreadcursor (llhnd);
+         llcollist = col_lists[iCol];
+//k         llcollist = (PLLHND) LLreadcursor (llhnd);
          LLsetcursor (llcollist, iRow); 
          x += COLWID;
          y = YSTART;
