@@ -20,7 +20,7 @@
 
    Linked List, I-Tree, Que, and Stack Library.
 
-   Copyright (c) 1990, 1997, 2019 Scott Beasley.
+   Copyright (c) 1990, 1997, 2019, 2026 Scott Beasley.
    Released into the Public Domain
 
    Scott Beasley.
@@ -55,7 +55,8 @@ PLLHND LLcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc)
       llhnd->style = style;
       llhnd->cmpfunc = cmpfunc;
       llhnd->current = (PLLENTRY) NULL;
-      
+      llhnd->refcnt = 1;
+          
       /* 
          If this is clear, then a assignment is done, and not a copy.
          This is useful for pointer storage.
@@ -67,26 +68,6 @@ PLLHND LLcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc)
 }
 
 /*
-   Creates a view into a linked list.
-*/
-PLLHND LLdup (PLLHND llhnd)
-{
-   PLLHND llhndout;
-
-   /* Create a link list information block. */
-   llhndout = (PLLHND) malloc (sizeof (LLHND));
-
-   if (!llhndout)
-      return (PLLHND) NULL;
-   else {
-      memcpy (llhndout, llhnd, sizeof (LLHND));
-      llhnd->bMode = 0;
-   }
-
-   return (PLLHND) llhndout;
-}
-
-/*
    Delete a link list, and free up it's handle.
 */
 int LLdestroy (PLLHND llhnd)
@@ -95,16 +76,14 @@ int LLdestroy (PLLHND llhnd)
 
    entry = llhnd->llfirst;
    while (LLentrycount (llhnd)) {
-      if (entry->entry) {
+      if (llhnd->bMemCpy && entry->entry) {
          free (entry->entry);
-         //entry->entry = (LLELEMENT) NULL;
       }
 
       if (entry->next) {
          entry = entry->next;
          if (entry->prev) {
             free (entry->prev);
-            //entry->prev = (PLLENTRY) NULL;
          }
       }
 
@@ -113,6 +92,8 @@ int LLdestroy (PLLHND llhnd)
             free (entry);
          break;
       }
+      
+      llhnd->entrycnt--;
    }
 
    free (llhnd);
@@ -149,17 +130,25 @@ int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
       return ERROR;
 
    llentry = (PLLENTRY) malloc (sizeof (LLENTRY));
-
-   if (!llhnd->entrysz) {
-      llentry->entry = (LLELEMENT) malloc (strlen ((char *) entry) + 1);
-   }
-      
-   else {
-      llentry->entry = (LLELEMENT) malloc (llhnd->entrysz);
-   }
-
-   if (!llentry->entry || !llentry) 
+   if (!llentry)
       return ERROR;
+
+   if (llhnd->bMemCpy) {
+      if (!llhnd->entrysz) {
+         llentry->entry = (LLELEMENT) malloc (entry ? strlen ((char *) entry) + 1 : 1);
+      }
+         
+      else {
+         llentry->entry = (LLELEMENT) malloc (llhnd->entrysz);
+      }
+
+      if (!llentry->entry) {
+         free (llentry);
+         return ERROR;
+      }
+   }
+   else
+      llentry->entry = (LLELEMENT) entry;
 
    /* Append the item to the list. */
    if (ws == LLAPPEND) {
@@ -171,6 +160,7 @@ int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
       else {
          llentry->prev = llhnd->lllast;
          llhnd->lllast->next = llentry;
+         llhnd->current = llentry;
       }
 
       llhnd->lllast = llentry;
@@ -181,22 +171,36 @@ int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
    else {
       insertentry = llhnd->llfirst;
 
-      if (pos != 0) {
+      if (!insertentry) {
+         llhnd->llfirst = llhnd->lllast = llhnd->current = llentry;
+         llentry->prev = (PLLENTRY) NULL;
+         llentry->next = (PLLENTRY) NULL;
+      }
+
+      else if (pos != 0) {
          while (insertentry->next && pos--) {
             insertentry = insertentry->next;
          }
+
+         llentry->prev = insertentry->prev;
+         llentry->next = insertentry;
+         llhnd->current = llentry;
+
+         if (llentry->prev != (PLLENTRY)NULL)
+            llentry->prev->next = llentry;
+
+         insertentry->prev = llentry;
       } else { // Reset first entry if inserting above the first
          llhnd->llfirst = llentry;
+         llentry->prev = insertentry->prev;
+         llentry->next = insertentry;
+         llhnd->current = llentry;
+
+         if (llentry->prev != (PLLENTRY)NULL)
+            llentry->prev->next = llentry;
+
+         insertentry->prev = llentry;
       }
-
-      llentry->prev = insertentry->prev;
-      llentry->next = insertentry;
-      llhnd->current = llentry;
-
-      if (llentry->prev != (PLLENTRY)NULL)
-         llentry->prev->next = llentry;
-	
-      insertentry->prev = llentry;
    }
 
    if (!llhnd->bMemCpy) {
@@ -205,7 +209,10 @@ int LLwrite (PLLHND llhnd, LLELEMENT entry, int ws, int pos)
 
    else {
       if (!llhnd->entrysz) {
-         strcpy ((char *) llentry->entry, (char *) entry);
+         if (entry)
+            strcpy ((char *) llentry->entry, (char *) entry);
+         else
+            *((char *) llentry->entry) = '\0';
       }
 
       else {
@@ -231,13 +238,20 @@ int LLread (PLLHND llhnd, LLELEMENT entry, int rs, int pos)
    if (rs == LLSEEK) {
       llhnd->current = llhnd->llfirst;
 
+      if (!llhnd->current)
+         return EOL;
+
       while (llhnd->current->next && pos--) {
          llhnd->current = llhnd->current->next;
       }
    }
    
    if (llhnd->current) {
-      if (!llhnd->entrysz) {
+      if (!llhnd->bMemCpy) {
+         memcpy (entry, &llhnd->current->entry, sizeof (LLELEMENT));
+      }
+
+      else if (!llhnd->entrysz) {
          strcpy ((char *) entry, (char *) llhnd->current->entry);
       }
 
@@ -252,9 +266,6 @@ int LLread (PLLHND llhnd, LLELEMENT entry, int rs, int pos)
       return EOL;
    }
    
-   // if (!llhnd->current)
-   //    return EOL;
-   // else
    return OK;
 }
 
@@ -266,6 +277,8 @@ int LLdelete (PLLHND llhnd, int pos)
    PLLENTRY entry;
 
    entry = llhnd->llfirst;
+   if (!entry)
+      return ERROR;
 
    if (pos) {
       while (entry->next && pos--) {
@@ -273,22 +286,28 @@ int LLdelete (PLLHND llhnd, int pos)
       }
    }
 
-   if (entry != llhnd->llfirst && entry != llhnd->lllast) {
+   if (entry->prev) {
       entry->prev->next = entry->next;
-      entry->next->prev = entry->prev;
    }
 
-   if (entry == llhnd->llfirst) {
-      entry->next->prev = (PLLENTRY) NULL;
+   else {
       llhnd->llfirst = entry->next;
    }
 
-   if (entry == llhnd->lllast) {
-      entry->prev->next =  (PLLENTRY) NULL;
+   if (entry->next) {
+      entry->next->prev = entry->prev;
+   }
+
+   else {
       llhnd->lllast = entry->prev;
    }
 
-   free (entry->entry);
+   if (llhnd->current == entry)
+      llhnd->current = entry->next ? entry->next : entry->prev;
+
+   if (llhnd->bMemCpy && entry->entry)
+      free (entry->entry);
+
    entry->entry = (LLELEMENT) NULL;
    free (entry);
    llhnd->entrycnt--;
@@ -302,19 +321,17 @@ int LLdelete (PLLHND llhnd, int pos)
 int LLclear (PLLHND llhnd)
 {
    PLLENTRY entry;
+   PLLENTRY next;
 
    entry = llhnd->llfirst;
-   while (llhnd->entrycnt--) {
-      if (entry->entry)
+   while (entry) {
+      next = entry->next;
+
+      if (llhnd->bMemCpy && entry->entry)
          free (entry->entry);
 
-      if (entry->next)
-         entry = entry->next;
-      else
-         break;
-
-      if (entry->prev)
-         free (entry->prev);
+      free (entry);
+      entry = next;
    }
 
    llhnd->entrycnt = 0;
@@ -329,6 +346,8 @@ int LLclear (PLLHND llhnd)
 int LLsetcursor (PLLHND llhnd, int pos)
 {
    llhnd->current = llhnd->llfirst;
+   if (!llhnd->current)
+      return EOL;
 
    if (pos) {
       while (llhnd->current->next && pos--) {
@@ -348,6 +367,8 @@ int LLsetcursor (PLLHND llhnd, int pos)
 int LLreplace (PLLHND llhnd, int pos, LLELEMENT entry)
 {
    llhnd->current = llhnd->llfirst;
+   if (!llhnd->current)
+      return ERROR;
 
    if (pos) {
       while (llhnd->current->next && pos--) {
@@ -355,31 +376,28 @@ int LLreplace (PLLHND llhnd, int pos, LLELEMENT entry)
       }
    }
 
-   free (llhnd->current->entry);  // Free the current entry, to be replaced below.
-
-   if (!llhnd->bMemCpy) {  // Replace the old entry ptr wit the new one.
+   if (!llhnd->bMemCpy) {  // Replace the old entry ptr with the new one.
       llhnd->current->entry = (LLELEMENT) entry;
-   } else {      // Replace the old entry (char array) with the new one.  
+   } else {      // Replace the old entry (char array / mem block) with the new one.
+      LLELEMENT newentry;
       if (!llhnd->entrysz) {
-         llhnd->current->entry = (LLELEMENT) malloc (strlen ((char *)
-                                                        entry) + 1);
-         if (!llhnd->current->entry)
+         newentry = (LLELEMENT) malloc (strlen ((char *) entry) + 1);
+         if (!newentry)
             return ERROR;
-         else {
-            strcpy ((char *) llhnd->current->entry, (char *) entry);
-         }
-      } else {   // Replace the old entry (mem block) with the new one.  
-         llhnd->current->entry = (LLELEMENT) malloc (llhnd->entrysz);
-   
-         if (!llhnd->current->entry)
+         strcpy ((char *) newentry, (char *) entry);
+      } else {
+         newentry = (LLELEMENT) malloc (llhnd->entrysz);
+         if (!newentry)
             return ERROR;
-         else {
-            if (entry)
-               memcpy (llhnd->current->entry, entry, llhnd->entrysz);
-            else
-               memset (llhnd->current->entry, 0, llhnd->entrysz);
-         }
+         if (entry)
+            memcpy (newentry, entry, llhnd->entrysz);
+         else
+            memset (newentry, 0, llhnd->entrysz);
       }
+      /* Allocation succeeded — safe to free the old entry now. */
+      if (llhnd->current->entry)
+         free (llhnd->current->entry);
+      llhnd->current->entry = newentry;
    }
 
    return OK;
@@ -390,6 +408,9 @@ int LLreplace (PLLHND llhnd, int pos, LLELEMENT entry)
 */
 int LLnext (PLLHND llhnd)
 {
+   if (!llhnd->current)
+      return EOL;
+
    if (llhnd->current->next) {
       llhnd->current = llhnd->current->next;
       return OK;
@@ -404,6 +425,9 @@ int LLnext (PLLHND llhnd)
 */
 int LLprev (PLLHND llhnd)
 {
+   if (!llhnd->current)
+      return BOL;
+
    if (llhnd->current->prev) {
       llhnd->current = llhnd->current->prev;
       return OK;
@@ -418,6 +442,8 @@ int LLprev (PLLHND llhnd)
 int LLsearch (PLLHND llhnd, COMPFUNC cmpfunc, LLELEMENT entry)
 {
    llhnd->current = llhnd->llfirst;
+   if (!llhnd->current)
+      return NOTFND;
 
    while (1) {
       if (cmpfunc) {
@@ -432,7 +458,7 @@ int LLsearch (PLLHND llhnd, COMPFUNC cmpfunc, LLELEMENT entry)
          }
 
          else {
-            if (memcmp (entry, llhnd->current->entry, llhnd->entrysz))
+            if (!memcmp (entry, llhnd->current->entry, llhnd->entrysz))
                return OK;
          }
       }
@@ -502,21 +528,23 @@ void LLshellsort (PLLHND llhnd, int istyle)
           icmpndx = i - igap;
           while (icmpndx >= 0) {
              LLsetcursor (llhnd, icmpndx);
-             llentry1 = LLreadcursor (llhnd);
+             llentry1 = LLcurrent (llhnd);
 
              LLsetcursor (llhnd, icmpndx + igap);
-             llentry2 = LLreadcursor (llhnd);
+             llentry2 = LLcurrent (llhnd);
 
              if (llhnd->cmpfunc) {
-                icmpres = (*llhnd->cmpfunc) (llentry1, llentry2);
+                icmpres = (*llhnd->cmpfunc) (llentry1->entry, llentry2->entry);
              }
          
              else {
                 if (!llhnd->entrysz) {
-                   icmpres = strcmp ((char *) llentry1, (char *) llentry2);
+                   icmpres = strcmp ((char *) llentry1->entry,
+                                     (char *) llentry2->entry);
                 }
                 else {
-                   icmpres = memcmp (llentry1, llentry2, llhnd->entrysz);
+                   icmpres = memcmp (llentry1->entry, llentry2->entry,
+                                    llhnd->entrysz);
                 }
              }
        
@@ -541,19 +569,28 @@ void LLshellsort (PLLHND llhnd, int istyle)
 /*
    Create a queue for use.
 */
+
 PQHND Qcreate (int entrysz, int qsize, int mode)
 {
    PQHND qhnd;
+   int slotsz;
 
    /* Create a queue information block. */
    qhnd = (PQHND) malloc (sizeof (QHND));
+   if (!qhnd)
+      return (PQHND) NULL;
 
-   qhnd->storage = (QELEMENT) malloc (entrysz * qsize);
+   slotsz = mode ? entrysz : (int) sizeof (QELEMENT);
+   qhnd->storage = (QELEMENT) malloc (slotsz * qsize);
+   if (!qhnd->storage) {
+      free (qhnd);
+      return (PQHND) NULL;
+   }
 
    qhnd->qwritep = qhnd->storage;
    qhnd->qreadp = qhnd->storage;
    qhnd->entrysz = entrysz;
-   qhnd->bottom = qhnd->storage + (entrysz * qsize);
+   qhnd->bottom = (char *) qhnd->storage + (slotsz * qsize);
    qhnd->qsize = qsize;
    qhnd->entrycnt = 0;
    qhnd->mode = mode;
@@ -577,22 +614,21 @@ int Qdestroy (PQHND qhnd)
 */
 int Qwrite (PQHND qhnd, QELEMENT entry)
 {
+   int slotsz = Qslotsize (qhnd);
+
    if (qhnd->entrycnt >= qhnd->qsize) {
       return QFULL;
    }
 
    if (!qhnd->mode)
-      qhnd->qwritep = entry;
+      memcpy (qhnd->qwritep, &entry, slotsz);
    else   
       memcpy (qhnd->qwritep, entry, qhnd->entrysz);
 
 
-   qhnd->qwritep = (qhnd->qwritep > qhnd->bottom ? NULL : 
-                     qhnd->qwritep + qhnd->entrysz);
-
-   if (!qhnd->qwritep) {
+   qhnd->qwritep = (char *) qhnd->qwritep + slotsz;
+   if (qhnd->qwritep >= qhnd->bottom) {
       qhnd->qwritep = qhnd->storage;
-      return QFULL;
    }
 
    qhnd->entrycnt++;
@@ -605,22 +641,20 @@ int Qwrite (PQHND qhnd, QELEMENT entry)
 */
 int Qread (PQHND qhnd, QELEMENT entry)
 {
+   int slotsz = Qslotsize (qhnd);
+
    if (!qhnd->entrycnt) {
       return QEMPTY;
    }
 
    if (!qhnd->mode)
-      entry = qhnd->qreadp;
+      memcpy (entry, qhnd->qreadp, slotsz);
    else   
       memcpy (entry, qhnd->qreadp, qhnd->entrysz);
 
-   qhnd->qreadp = (qhnd->qreadp > qhnd->bottom ? NULL : 
-                    qhnd->qreadp + qhnd->entrysz);
-
-   if (!qhnd->qreadp) {
+   qhnd->qreadp = (char *) qhnd->qreadp + slotsz;
+   if (qhnd->qreadp >= qhnd->bottom) {
       qhnd->qreadp = qhnd->storage;
-      qhnd->entrycnt = 0;
-      return QEMPTY;
    }
 
    qhnd->entrycnt--;
@@ -631,21 +665,38 @@ int Qread (PQHND qhnd, QELEMENT entry)
 /*
    Create a stack for use.
 */
+static int Sslotsize (PSHND shnd)
+{
+   return shnd->mode ? shnd->entrysz : (int) sizeof (SELEMENT);
+}
+
 PSHND Screate (int entrysz, int Stsize, int mode, int type, STACKELMFREE freefunc)
 {
    PSHND shnd;
+   int slotsz;
 
    /* Create a stack information block. */
    shnd = (PSHND) malloc (sizeof (SHND));
+   if (!shnd)
+      return (PSHND) NULL;
 
    if (type == LL_STACK) {
-      shnd->llhnd = LLcreate (entrysz, 1, LLNORMAL, NULL);
+      shnd->llhnd = LLcreate (entrysz, mode, LLNORMAL, NULL);
+      if (!shnd->llhnd) {
+         free (shnd);
+         return (PSHND) NULL;
+      }
       shnd->sptr = (SELEMENT) NULL;
       shnd->bottom = (SELEMENT) NULL;   
    } else {
-      shnd->storage = (SELEMENT) malloc (entrysz * Stsize);
+      slotsz = mode ? entrysz : (int) sizeof (SELEMENT);
+      shnd->storage = (SELEMENT) malloc (slotsz * Stsize);
+      if (!shnd->storage) {
+         free (shnd);
+         return (PSHND) NULL;
+      }
       shnd->sptr = shnd->storage;
-      shnd->bottom = shnd->storage + (entrysz * Stsize);   
+      shnd->bottom = shnd->storage + (slotsz * Stsize);   
       shnd->llhnd = (PLLHND) NULL;   
    }
 
@@ -678,31 +729,23 @@ int Sdestroy (PSHND shnd)
 */
 int Spush (PSHND shnd, SELEMENT entry)
 {
+   int slotsz = Sslotsize (shnd);
+   SELEMENT dest;
+
    if (shnd->entrycnt >= shnd->ssize) {
       return SOVERFLOW;
    }
 
    if (!shnd->llhnd) {
-      shnd->sptr = (shnd->sptr > shnd->bottom ? NULL : 
-                     shnd->sptr + shnd->entrysz);
-
-      if (!shnd->sptr) {
-         shnd->sptr = shnd->storage;
-         return SOVERFLOW;
-      }
-
+      dest = shnd->storage + (slotsz * shnd->entrycnt);
       if (!shnd->mode)
-         shnd->sptr = entry;
+         memcpy (dest, &entry, slotsz);
       else   
-         memcpy (shnd->sptr, entry, shnd->entrysz);
+         memcpy (dest, entry, shnd->entrysz);
+      shnd->sptr = dest;
    } else {
-
-       if (shnd->entrycnt > shnd->ssize) {
-            return SOVERFLOW;
-            //LLhomecursor (shnd->llhnd);
-       }
-
-       LLwrite (shnd->llhnd, (LLELEMENT) entry, LLAPPEND, 0);
+      if (LLwrite (shnd->llhnd, (LLELEMENT) entry, LLAPPEND, 0) != OK)
+         return ERROR;
    }
 
    shnd->entrycnt++;
@@ -713,9 +756,12 @@ int Spush (PSHND shnd, SELEMENT entry)
 /*
    Pop next stack entry (or read with no POP).
 */
-int Spop (PSHND shnd, SELEMENT entry, int peek, int nofree)
+int Spop (PSHND shnd, SELEMENT entry, int peek)
 {
-   if (shnd->entrycnt < 0) {
+   int slotsz = Sslotsize (shnd);
+   SELEMENT src;
+
+   if (shnd->entrycnt <= 0) {
       if (shnd->llhnd) {
          LLhomecursor (shnd->llhnd);
       } else {
@@ -726,33 +772,27 @@ int Spop (PSHND shnd, SELEMENT entry, int peek, int nofree)
    }
 
    if (!shnd->llhnd) {
+      src = shnd->storage + (slotsz * (shnd->entrycnt - 1));
       if (!shnd->mode)
-         entry = shnd->sptr;
+         memcpy (entry, src, slotsz);
       else   
-         memcpy (entry, shnd->sptr, shnd->entrysz);
+         memcpy (entry, src, shnd->entrysz);
 
       if (!peek) {
-         shnd->sptr = (shnd->sptr == shnd->storage ? NULL : 
-                        shnd->sptr - shnd->entrysz);
-
-         if (!shnd->sptr) {
-            shnd->sptr = shnd->storage;
-            shnd->entrycnt = 0;
-            return SUNDERFLOW;
-         }
+         shnd->entrycnt--;
+         shnd->sptr = shnd->entrycnt ?
+                      shnd->storage + (slotsz * (shnd->entrycnt - 1)) :
+                      shnd->storage;
       }
    } else {
       LLread (shnd->llhnd, (LLELEMENT)entry, LLSEEK, shnd->entrycnt-1);
+      if (!peek)
+         LLdelete (shnd->llhnd, shnd->entrycnt - 1);
    }
 
-   if (!peek) {
+   if (!peek && shnd->llhnd) {
       shnd->entrycnt--;
    }
-
-   //    if (shnd->freefunc && !nofree) {
-   //       (*shnd->freefunc) (entry);
-   //    }
-   // }
 
    return OK;
 }
@@ -763,20 +803,21 @@ int Spop (PSHND shnd, SELEMENT entry, int peek, int nofree)
 int Sread (PSHND shnd, SELEMENT entry, int stk_ndx)
 {
    SELEMENT sptr = shnd->storage;
+   int slotsz = Sslotsize (shnd);
 
-   if (stk_ndx > shnd->entrycnt) {
+   if (stk_ndx < 0 || stk_ndx >= shnd->entrycnt) {
       return SUNDERFLOW;
    }
 
    if (!shnd->llhnd) {
-      sptr = shnd->storage + (shnd->entrysz * stk_ndx);
+      sptr = shnd->storage + (slotsz * stk_ndx);
 
       if (!shnd->mode)
-         entry = sptr;
+         memcpy (entry, sptr, slotsz);
       else   
          memcpy (entry, sptr, shnd->entrysz);
    } else {
-      LLread (shnd->llhnd, (LLELEMENT)entry, LLSEEK, stk_ndx-1);
+      LLread (shnd->llhnd, (LLELEMENT)entry, LLSEEK, stk_ndx);
    }
 
    return OK;
@@ -785,6 +826,44 @@ int Sread (PSHND shnd, SELEMENT entry, int stk_ndx)
 /*
    Creates a I-Tree for use.
 */
+static int Tcompare (PTHND thnd, TELEMENT entry1, TELEMENT entry2)
+{
+   if (thnd->cmpfunc) {
+      return (*thnd->cmpfunc) (entry1, entry2);
+   }
+
+   if (!thnd->entrysz) {
+      return strcmp ((char *) entry1, (char *) entry2);
+   }
+
+   return memcmp (entry1, entry2, thnd->entrysz);
+}
+
+static void Tfreeentry (PTHND thnd, PTENTRY tentry)
+{
+   if (thnd->bMemCpy && tentry->entry) {
+      free (tentry->entry);
+   }
+}
+
+static PTENTRY Tleftmost (PTENTRY entry)
+{
+   while (entry && entry->left) {
+      entry = entry->left;
+   }
+
+   return entry;
+}
+
+static PTENTRY Trightmost (PTENTRY entry)
+{
+   while (entry && entry->right) {
+      entry = entry->right;
+   }
+
+   return entry;
+}
+
 PTHND Tcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc)
 {
    PTHND thnd;
@@ -797,6 +876,8 @@ PTHND Tcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc)
    else {      
       thnd->entrysz = entrysz;
       thnd->troot = (PTENTRY) NULL;
+      thnd->current = (PTENTRY) NULL;
+      thnd->lastelm = (PTENTRY) NULL;
       thnd->entrycnt = 0;
       thnd->bMode = 1;
       thnd->style = style;
@@ -827,15 +908,7 @@ int Twrite (PTHND thnd, TELEMENT entry)
       if (!current) {
          tentry = (PTENTRY) malloc (sizeof (TENTRY));
 
-         if (!thnd->entrysz) {
-            tentry->entry = (TELEMENT) malloc (strlen ((char *) entry) + 1);
-         }
-      
-         else {
-            tentry->entry = (TELEMENT) malloc (thnd->entrysz);
-         }
-
-         if (!tentry->entry || !tentry) 
+         if (!tentry)
             return ERROR;
 
          if (!thnd->bMemCpy) {
@@ -844,10 +917,21 @@ int Twrite (PTHND thnd, TELEMENT entry)
 
          else {
             if (!thnd->entrysz) {
+               tentry->entry = (TELEMENT) malloc (strlen ((char *) entry) + 1);
+               if (!tentry->entry) {
+                  free (tentry);
+                  return ERROR;
+               }
                strcpy ((char *) tentry->entry, (char *) entry);
             }
 
             else {
+               tentry->entry = (TELEMENT) malloc (thnd->entrysz);
+               if (!tentry->entry) {
+                  free (tentry);
+                  return ERROR;
+               }
+
                if (entry)
                   memcpy (tentry->entry, entry, thnd->entrysz);
                else
@@ -864,6 +948,8 @@ int Twrite (PTHND thnd, TELEMENT entry)
             thnd->lastelm->next = tentry;
 
          thnd->lastelm = tentry;
+         thnd->current = tentry;
+         thnd->entrycnt++;
 
          if (!thnd->troot) {
             thnd->troot = tentry;
@@ -881,18 +967,7 @@ int Twrite (PTHND thnd, TELEMENT entry)
          break;
       }
 
-      if (thnd->cmpfunc) {
-         icmpres = (*thnd->cmpfunc) (entry, current->entry);
-      }
-  
-      else {
-         if (!thnd->entrysz) {
-            icmpres = strcmp ((char *) entry, (char *) current->entry);
-         }
-         else {
-            icmpres = memcmp (entry, current->entry, thnd->entrysz);
-         }
-      }
+      icmpres = Tcompare (thnd, entry, current->entry);
 
       tlast = current;
       if (icmpres < 0) {
@@ -915,13 +990,16 @@ int Twrite (PTHND thnd, TELEMENT entry)
 TELEMENT Tsearch (PTHND thnd, TELEMENT entry, TELEMENT retentry)
 {
    PTENTRY current = thnd->troot;
-   int iFound = 0, icmpres;
+   int icmpres;
 
    if (!current)
       return (TELEMENT) NULL;
 
-   while (1) {
-      if (iFound) {
+   while (current) {
+      icmpres = Tcompare (thnd, entry, current->entry);
+
+      if (!icmpres) {
+         thnd->current = current;
          if (retentry) {
             if (!thnd->entrysz) {
                strcpy ((char *) retentry, (char *) current->entry);
@@ -932,25 +1010,7 @@ TELEMENT Tsearch (PTHND thnd, TELEMENT entry, TELEMENT retentry)
             }
          }
 
-         return iFound ? current->entry : (TELEMENT) NULL;
-      }
-
-      if (thnd->cmpfunc) {
-         icmpres = (*thnd->cmpfunc) (entry, current->entry);
-      }
-  
-      else {
-         if (!thnd->entrysz) {
-            icmpres = strcmp ((char *) entry, (char *) current->entry);
-         }
-         else {
-            icmpres = memcmp (entry, current->entry, thnd->entrysz);
-         }
-      }
-
-      if (!icmpres) {
-         iFound = 1;
-         continue;
+         return current->entry;
       }
 
       if (icmpres < 0) {
@@ -961,12 +1021,79 @@ TELEMENT Tsearch (PTHND thnd, TELEMENT entry, TELEMENT retentry)
          current = current->right;
       }
 
-      if (!current) {
-         break;
-      }
    }
 
-   return iFound ? current->entry : (TELEMENT) NULL;
+   return (TELEMENT) NULL;
+}
+
+/*
+   Sets the I-Tree iterator to the first node in sort order.
+*/
+int Thomecursor (PTHND thnd)
+{
+   thnd->current = Tleftmost (thnd->troot);
+
+   return thnd->current ? OK : EOL;
+}
+
+/*
+   Sets the I-Tree iterator to the last node in sort order.
+*/
+int Tlastcursor (PTHND thnd)
+{
+   thnd->current = Trightmost (thnd->troot);
+
+   return thnd->current ? OK : BOL;
+}
+
+/*
+   Moves the I-Tree iterator to the next node in sort order.
+*/
+int Tnext (PTHND thnd)
+{
+   PTENTRY entry;
+
+   if (!thnd->current)
+      return EOL;
+
+   if (thnd->current->right) {
+      thnd->current = Tleftmost (thnd->current->right);
+      return OK;
+   }
+
+   entry = thnd->current;
+   while (entry->parent && entry == entry->parent->right) {
+      entry = entry->parent;
+   }
+
+   thnd->current = entry->parent;
+
+   return thnd->current ? OK : EOL;
+}
+
+/*
+   Moves the I-Tree iterator to the previous node in sort order.
+*/
+int Tprev (PTHND thnd)
+{
+   PTENTRY entry;
+
+   if (!thnd->current)
+      return BOL;
+
+   if (thnd->current->left) {
+      thnd->current = Trightmost (thnd->current->left);
+      return OK;
+   }
+
+   entry = thnd->current;
+   while (entry->parent && entry == entry->parent->left) {
+      entry = entry->parent;
+   }
+
+   thnd->current = entry->parent;
+
+   return thnd->current ? OK : BOL;
 }
 
 /*
@@ -974,19 +1101,36 @@ TELEMENT Tsearch (PTHND thnd, TELEMENT entry, TELEMENT retentry)
 */
 int Tdestroy (PTHND thnd)
 {
-   PTENTRY entry, lastentry;
+   PTENTRY entry, parent;
 
    entry = thnd->troot;
-   while (1) {
-      if (entry) {
-         lastentry = entry;
-         entry = entry->next;
-         free (lastentry->entry);
-         free (lastentry);
+   while (entry) {
+      if (entry->left) {
+         entry = entry->left;
       }
 
-      else
-         break;
+      else if (entry->right) {
+         entry = entry->right;
+      }
+
+      else {
+         parent = entry->parent;
+
+         if (parent) {
+            if (parent->left == entry)
+               parent->left = (PTENTRY) NULL;
+            else
+               parent->right = (PTENTRY) NULL;
+         }
+
+         else {
+            thnd->troot = (PTENTRY) NULL;
+         }
+
+         Tfreeentry (thnd, entry);
+         free (entry);
+         entry = parent;
+      }
    }
 
    memset (thnd, 0, sizeof (THND));
@@ -1022,64 +1166,17 @@ PTHND Tdup (PTHND thnd)
 int Tdelete (PTHND thnd, TELEMENT entry)
 {
    PTENTRY current = thnd->troot;
-   int iFound = 0, icmpres;
+   PTENTRY replace, child, nextprev, replaceparent;
+   int icmpres;
 
    if (!current)
-      return 0;
+      return ERROR;
 
-   while (1) {
-      if (iFound) {
-         if (current == thnd->troot) {
-            if (current->left) {
-               thnd->troot = current->left;
-               if (current->right) {
-                  Twrite (thnd, current->right->entry);
-                  thnd->lastelm->right = current->right;
-               }
-            }
-
-            else if (current->right) {
-               thnd->troot = current->right;
-            }
-         }
-
-         else {
-            if (current->left) {
-               Twrite (thnd, current->left->entry);
-               thnd->lastelm->left = current->left;
-            }
-
-            if (current->right) {
-               Twrite (thnd, current->right->entry); 
-               thnd->lastelm->right = current->right;
-            }
-         }
-
-         if (current != thnd->troot)
-            thnd->lastelm->next = current->next;
-
-         free (current->entry);
-         free (current);
-
-         return iFound;
-      }
-
-      if (thnd->cmpfunc) {
-         icmpres = (*thnd->cmpfunc) (entry, current->entry);
-      }
-  
-      else {
-         if (!thnd->entrysz) {
-            icmpres = strcmp ((char *) entry, (char *) current->entry);
-         }
-         else {
-            icmpres = memcmp (entry, current->entry, thnd->entrysz);
-         }
-      }
+   while (current) {
+      icmpres = Tcompare (thnd, entry, current->entry);
 
       if (!icmpres) {
-         iFound = 1;
-         continue;
+         break;
       }
 
       if (icmpres < 0) {
@@ -1089,13 +1186,81 @@ int Tdelete (PTHND thnd, TELEMENT entry)
       else {
          current = current->right;
       }
-
-      if (!current) {
-         break;
-      }
    }
 
-   return iFound;
+   if (!current)
+      return ERROR;
+
+   nextprev = (PTENTRY) NULL;
+   replace = thnd->troot;
+   while (replace && replace != current) {
+      nextprev = replace;
+      replace = replace->next;
+   }
+
+   if (current->left && current->right) {
+      replace = current->right;
+      while (replace->left) {
+         replace = replace->left;
+      }
+
+      replaceparent = replace->parent;
+      replace->left = current->left;
+      replace->parent = current->parent;
+
+      if (replace != current->right) {
+         child = replace->right;
+         if (replaceparent->left == replace)
+            replaceparent->left = child;
+         else
+            replaceparent->right = child;
+
+         if (child)
+            child->parent = replaceparent;
+
+         replace->right = current->right;
+      }
+
+      if (replace->left)
+         replace->left->parent = replace;
+
+      if (replace->right)
+         replace->right->parent = replace;
+   }
+
+   else {
+      replace = current->left ? current->left : current->right;
+
+      if (replace)
+         replace->parent = current->parent;
+   }
+
+   if (!current->parent) {
+      thnd->troot = replace;
+   }
+
+   else if (current->parent->left == current) {
+      current->parent->left = replace;
+   }
+
+   else {
+      current->parent->right = replace;
+   }
+
+   if (nextprev)
+      nextprev->next = current->next;
+
+   if (thnd->lastelm == current)
+      thnd->lastelm = nextprev;
+
+   if (thnd->current == current)
+      thnd->current = replace ? replace : thnd->troot;
+
+   Tfreeentry (thnd, current);
+   free (current);
+   thnd->entrycnt--;
+
+   return OK;
 }
 
 /*

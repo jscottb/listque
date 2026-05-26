@@ -93,19 +93,19 @@ typedef LLENTRY *PLLENTRY;
 typedef int (*COMPFUNC) (const PELEMENT, const PELEMENT);
 
 /* Pointer to a element to be stored in a que. */
-typedef char *QELEMENT;
+typedef void *QELEMENT;
 
 /* LL information structure. */
 typedef struct _LLHND {
    PLLENTRY       llfirst;  /* First entry into the link list. */
    PLLENTRY       lllast;   /* Last entry into the link list. */
    PLLENTRY       current;  /* Pointer to current entry. */
-   //PLLENTRY       no_elm;
    long           entrysz;  /* Size of the link list entry. */
    int            entrycnt; /* Number of entries currently in list. */
    int            bMemCpy;  /* */
    int            bMode;    /* Is the list writtable, or a view. */
    int            style;    /* Style of the list. */
+   int            refcnt;   /* Ref count for LLdestroy. */
    COMPFUNC       cmpfunc;  /* */
 } LLHND;
 
@@ -222,6 +222,24 @@ typedef THND *PTHND;
 #define EOLL(llhnd) !(llhnd)->current
 
 /*
+   Macro that returns the number of entries in a tree.
+*/
+#define Tentrycount(thnd) (thnd)->entrycnt
+
+/*
+   Return Pointer to current tree node's storage data.
+*/
+#define Treadcursor(thnd) ((thnd)->current ? (thnd)->current->entry : NULL)
+
+/*
+   Get current tree node ptr.
+*/
+#define Tcurrent(thnd) (thnd)->current
+
+/* Returns true if end of tree iterator is reached. */
+#define EOT(thnd) !(thnd)->current
+
+/*
    Creates a link list for use.
 */
 PLLHND LLcreate (long entrysz, int bMemCpy, int style, COMPFUNC cmpfunc);
@@ -307,6 +325,9 @@ void LLshellsort (PLLHND llhnd, int istyle);
 */
 #define Qempty(qhnd) (qhnd)->entrycnt ? 0 : 1
 
+/* Get slot size. */
+#define Qslotsize(qhnd) (qhnd)->mode?(qhnd)->entrysz:(int)sizeof(QELEMENT)
+
 /*
    Macro to reset que pointers
    to the top of the queue.
@@ -368,7 +389,7 @@ int Spush (PSHND shnd, SELEMENT entry);
 /*
    Pop next stack entry.
 */
-int Spop (PSHND shnd, SELEMENT entry, int peek, int nofree);
+int Spop (PSHND shnd, SELEMENT entry, int peek);
 
 /*
    Read a stack entry.
@@ -401,6 +422,26 @@ int Twrite (PTHND thnd, TELEMENT entry);
 TELEMENT Tsearch (PTHND thnd, TELEMENT entry, TELEMENT retentry);
 
 /*
+   Sets the I-Tree iterator to the first node in sort order.
+*/
+int Thomecursor (PTHND thnd);
+
+/*
+   Sets the I-Tree iterator to the last node in sort order.
+*/
+int Tlastcursor (PTHND thnd);
+
+/*
+   Moves the I-Tree iterator to the next node in sort order.
+*/
+int Tnext (PTHND thnd);
+
+/*
+   Moves the I-Tree iterator to the previous node in sort order.
+*/
+int Tprev (PTHND thnd);
+
+/*
    Deletes a node in a I-Tree.
 */
 int Tdelete (PTHND thnd, TELEMENT entry);
@@ -416,4 +457,3 @@ int Tclose (PTHND thnd);
 // #define	hashstr(str) (((unsigned char)(str)[1]<<5)+(unsigned char)(str)[0])
 
 #endif
-

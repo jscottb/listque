@@ -54,7 +54,6 @@ int main (void)
    icnt = LLentrycount (llhnd);
    char entry[20];
    LLhomecursor(llhnd);
-//   LLnext (llhnd);   
    while (!EOLL(llhnd)) {
       LLread (llhnd, (LLELEMENT)entry, LLNEXT, 0);
       printf ("%s\n", entry);
